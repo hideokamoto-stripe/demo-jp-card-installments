@@ -6,7 +6,7 @@ import {
   Scripts,
   ScrollRestoration,
 } from "@remix-run/react";
-
+import { Button } from "~/components/ui/button"
 import "./tailwind.css";
 
 export const links: LinksFunction = () => [
@@ -32,6 +32,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
+      <Button>Click me</Button>
         {children}
         <ScrollRestoration />
         <Scripts />
