@@ -3,31 +3,15 @@ import type {
   LoaderFunctionArgs,
   MetaFunction,
 } from '@remix-run/cloudflare';
-import {
-  Form,
-  json,
-  useActionData,
-  useLoaderData,
-  useSubmit,
-} from '@remix-run/react';
-import {
-  CardElement,
-  Elements,
-  ElementsConsumer,
-} from '@stripe/react-stripe-js';
+import { json, useActionData, useLoaderData } from '@remix-run/react';
+import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import { useState } from 'react';
 import Stripe from 'stripe';
-import { Button } from '~/components/ui/button';
-import { Label } from '~/components/ui/label';
-import {
-  Select,
-  SelectValue,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-} from '~/components/ui/select';
+import { CardForm } from '~/components/stripe/CardForm';
+import { ConfirmPayment } from '~/components/stripe/ConfirmPayment';
 
+import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 const stripePromise = loadStripe(import.meta.env.VITE_PUBLIC_STRIPE_PUB_KEY);
 
 export const meta: MetaFunction = () => {
@@ -39,6 +23,33 @@ export const meta: MetaFunction = () => {
 
 export const loader = async (props: LoaderFunctionArgs) => {
   const stripe = new Stripe(props.context.cloudflare.env.STRIPE_SECRET_API_KEY);
+  const url = new URL(props.request.url);
+  const paymentIntentId = url.searchParams.get('payment_intent');
+  if (paymentIntentId) {
+    const paymentIntent = await stripe.paymentIntents.retrieve(
+      paymentIntentId,
+      {
+        expand: ['latest_charge'],
+      }
+    );
+    const { customer, amount, currency, status } = paymentIntent;
+    let { latest_charge: charge } = paymentIntent;
+    if (typeof charge === 'string') {
+      charge = await stripe.charges.retrieve(charge);
+    }
+    const installments =
+      charge['payment_method_details']['card']['installments'];
+    return {
+      customerId: customer,
+      orderDetail: {
+        amount,
+        currency,
+        status,
+        installments,
+      },
+    };
+  }
+
   const customer = await stripe.customers.create({
     name: 'Demo for card installments',
   });
@@ -98,7 +109,6 @@ export const action = async (args: ActionFunctionArgs) => {
       paymentIntentId,
       confirmData
     );
-    console.log(paymentIntent);
   }
 
   return json({
@@ -107,11 +117,9 @@ export const action = async (args: ActionFunctionArgs) => {
 };
 
 export default function Index() {
-  const { customerId } = useLoaderData<typeof loader>();
+  const { customerId, orderDetail } = useLoaderData<typeof loader>();
   const data = useActionData<typeof action>();
-  const submit = useSubmit();
   const [error, setError] = useState('');
-  const [installmentPlan, setInstallmentPlan] = useState<string>('');
   return (
     <div className="w-full lg:grid lg:min-h-[600px] xl:min-h-[800px]">
       <div className="flex items-center justify-center py-12">
@@ -128,139 +136,40 @@ export default function Index() {
               <li>3600003920000009</li>
               <li>4000003920000029</li>
             </ul>
-            <pre>
-              <code>{JSON.stringify(error, null, 2)}</code>
-            </pre>
+            {error ? <p>{error}</p> : null}
           </div>
           <Elements stripe={stripePromise}>
-            <ElementsConsumer>
-              {({ elements, stripe }) => {
-                if (!stripe || !elements) return null;
-                if (data && data.paymentIntent) {
-                  const paymentIntent = data.paymentIntent;
-                  if (
-                    paymentIntent.next_action &&
-                    paymentIntent.client_secret
-                  ) {
-                    return (
-                      <Form
-                        method="POST"
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          stripe.handleNextAction({
-                            clientSecret: paymentIntent.client_secret,
-                          });
-                        }}
-                      >
-                        <Button type="submit" className="w-full">
-                          Confirm payment
-                        </Button>
-                      </Form>
-                    );
-                  }
-                  return (
-                    <Form
-                      method="POST"
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        const [count, interval, type] =
-                          installmentPlan.split('-');
-                        const formData = new FormData();
-                        formData.append('payment_intent_id', paymentIntent.id);
-                        formData.append(
-                          'installments_plan_count',
-                          count === '0' ? '' : count
-                        );
-                        formData.append(
-                          'installments_plan_interval',
-                          interval === '0' ? '' : interval
-                        );
-                        formData.append('installments_plan_type', type);
-                        formData.append('action_type', 'confirm_payment');
-                        submit(formData, {
-                          method: 'POST',
-                        });
-                      }}
-                    >
-                      <Label>Installments Plan</Label>
-                      {data.paymentIntent.payment_method_options?.card
-                        ?.installments ? (
-                        <Select
-                          onValueChange={(value) => {
-                            setInstallmentPlan(value);
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="choose plan" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {data.paymentIntent.payment_method_options?.card?.installments.available_plans?.map(
-                              (plan) => {
-                                const { count, interval, type } = plan;
-                                const key = `${count || 0}-${interval || 0}-${type}`;
-                                const value = [
-                                  count,
-                                  interval,
-                                  count && interval ? null : type,
-                                ]
-                                  .filter(Boolean)
-                                  .join(' ');
-                                return (
-                                  <SelectItem key={`${key}`} value={`${key}`}>
-                                    {value}
-                                  </SelectItem>
-                                );
-                              }
-                            )}
-                          </SelectContent>
-                        </Select>
-                      ) : null}
-                      <Button type="submit" className="w-full">
-                        Order
-                      </Button>
-                    </Form>
-                  );
-                }
-                return (
-                  <Form
-                    method="POST"
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      const cardElement = elements?.getElement(CardElement);
-                      if (!cardElement) return;
-                      const { paymentMethod, error } =
-                        await stripe.createPaymentMethod({
-                          type: 'card',
-                          card: cardElement,
-                        });
-                      if (error && error.message) {
-                        setError(error.message);
-                        return;
-                      }
-                      if (!paymentMethod) return;
-                      const formData = new FormData();
-                      formData.append('payment_method_id', paymentMethod.id);
-                      formData.append('action_type', 'register_card');
-                      formData.append('customer_id', customerId);
-                      submit(formData, {
-                        method: 'POST',
-                      });
-                    }}
-                  >
-                    <CardElement
-                      className="my-4 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                      options={{
-                        hidePostalCode: true,
-                      }}
-                    />
-                    <Button type="submit" className="w-full">
-                      Register card
-                    </Button>
-                  </Form>
-                );
-              }}
-            </ElementsConsumer>
+            {data && data.paymentIntent ? (
+              <ConfirmPayment paymentIntent={data.paymentIntent} />
+            ) : (
+              <CardForm setError={setError} customerId={customerId} />
+            )}
           </Elements>
+          {orderDetail ? (
+            <Card x-chunk="dashboard-01-chunk-0">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Order detail
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {orderDetail.amount.toLocaleString()} {orderDetail.currency}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {orderDetail.installments ? (
+                    <pre>
+                      <code>
+                        {JSON.stringify(orderDetail.installments, null, 2)}
+                      </code>
+                    </pre>
+                  ) : (
+                    'One time'
+                  )}
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
       </div>
     </div>
