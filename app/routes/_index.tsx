@@ -106,15 +106,23 @@ export const action = async (args: ActionFunctionArgs) => {
       ?.toString();
     const installmentPlanType = body.get('installments_plan_type')?.toString();
     if (installmentPlanType) {
+      const plan: {
+        type: string;
+        count?: number;
+        interval?: string;
+      } = {
+        type: installmentPlanType,
+      }
+      if (installmentPlanType === 'fixed_count') {
+        plan.count =  Number(installmentPlanCount)
+        plan.interval = installmentPlanInterval
+      }
+      console.log(plan)
       confirmData['payment_method_options'] = {
         card: {
           installments: {
-            plan: {
-              type: installmentPlanType,
-              count: Number(installmentPlanCount),
-              interval: installmentPlanInterval,
-            } as any,
-          },
+            plan
+          } as any,
         },
       };
     }
