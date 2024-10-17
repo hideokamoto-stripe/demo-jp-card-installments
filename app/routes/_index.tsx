@@ -9,14 +9,12 @@ import { loadStripe } from '@stripe/stripe-js';
 import { useState } from 'react';
 import Stripe from 'stripe';
 import { CardForm } from '~/components/stripe/CardForm';
-import { ConfirmPayment } from '~/components/stripe/ConfirmPayment';
-
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 const stripePromise = loadStripe(import.meta.env.VITE_PUBLIC_STRIPE_PUB_KEY);
 
 export const meta: MetaFunction = () => {
   return [
-    { title: 'New Remix App' },
+    { title: 'クレジットカード分割払い（beta） デモ' },
     { name: 'description', content: 'Welcome to Remix!' },
   ];
 };
@@ -40,7 +38,7 @@ export const loader = async (props: LoaderFunctionArgs) => {
     const installments =
       charge['payment_method_details']['card']['installments'];
     return {
-      customerId: customer,
+      customerId: typeof customer === 'string' ? customer : customer?.id,
       orderDetail: {
         amount,
         currency,
@@ -81,20 +79,6 @@ export const action = async (args: ActionFunctionArgs) => {
         },
       },
     });
-    /**
-     * 分割払いをサポートしていないカードでは、そのまま決済を完了させる
-     */
-    if (
-      !paymentIntent.payment_method_options?.card?.installments ||
-      !paymentIntent.payment_method_options?.card?.installments.available_plans ||
-      paymentIntent.payment_method_options?.card?.installments.available_plans?.length < 1
-    ) {
-      paymentIntent = await stripe.paymentIntents.confirm(
-        paymentIntent.id,
-        confirmData
-      );
-
-    }
   }
   if (actionType === 'confirm_payment') {
     const paymentIntentId = body.get('payment_intent_id')?.toString() || '';
@@ -112,16 +96,15 @@ export const action = async (args: ActionFunctionArgs) => {
         interval?: string;
       } = {
         type: installmentPlanType,
-      }
+      };
       if (installmentPlanType === 'fixed_count') {
-        plan.count =  Number(installmentPlanCount)
-        plan.interval = installmentPlanInterval
+        plan.count = Number(installmentPlanCount);
+        plan.interval = installmentPlanInterval;
       }
-      console.log(plan)
       confirmData['payment_method_options'] = {
         card: {
           installments: {
-            plan
+            plan,
           } as any,
         },
       };
@@ -161,11 +144,11 @@ export default function Index() {
             {error ? <p>{error}</p> : null}
           </div>
           <Elements stripe={stripePromise}>
-            {data && data.paymentIntent ? (
-              <ConfirmPayment paymentIntent={data.paymentIntent} />
-            ) : (
-              <CardForm setError={setError} customerId={customerId} />
-            )}
+            <CardForm
+              setError={setError}
+              customerId={customerId}
+              paymentIntent={data?.paymentIntent}
+            />
           </Elements>
           {orderDetail ? (
             <Card x-chunk="dashboard-01-chunk-0">
