@@ -62,6 +62,9 @@ export const action = async (args: ActionFunctionArgs) => {
   const body = await args.request.formData();
   const actionType = body.get('action_type');
   let paymentIntent: Stripe.PaymentIntent | undefined = undefined;
+  const confirmData: Stripe.PaymentIntentConfirmParams = {
+    return_url: new URL(args.request.url).toString(),
+  };
   if (actionType === 'register_card') {
     const paymentMethodId = body.get('payment_method_id');
     const customerId = body.get('customer_id');
@@ -78,6 +81,20 @@ export const action = async (args: ActionFunctionArgs) => {
         },
       },
     });
+    /**
+     * 分割払いをサポートしていないカードでは、そのまま決済を完了させる
+     */
+    if (
+      !paymentIntent.payment_method_options?.card?.installments ||
+      !paymentIntent.payment_method_options?.card?.installments.available_plans ||
+      paymentIntent.payment_method_options?.card?.installments.available_plans?.length < 1
+    ) {
+      paymentIntent = await stripe.paymentIntents.confirm(
+        paymentIntent.id,
+        confirmData
+      );
+
+    }
   }
   if (actionType === 'confirm_payment') {
     const paymentIntentId = body.get('payment_intent_id')?.toString() || '';
@@ -88,9 +105,6 @@ export const action = async (args: ActionFunctionArgs) => {
       .get('installments_plan_interval')
       ?.toString();
     const installmentPlanType = body.get('installments_plan_type')?.toString();
-    const confirmData: Stripe.PaymentIntentConfirmParams = {
-      return_url: new URL(args.request.url).toString(),
-    };
     if (installmentPlanType) {
       confirmData['payment_method_options'] = {
         card: {

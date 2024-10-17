@@ -44,7 +44,7 @@ export const CardForm: FC<{
         }}
       />
       <Button type="submit" className="w-full">
-        Register card
+        注文する
       </Button>
     </Form>
   );
