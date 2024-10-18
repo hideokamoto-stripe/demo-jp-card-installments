@@ -1,47 +1,57 @@
-# Welcome to Remix + Cloudflare!
+# Stripe クレジットカード分割払いデモ
 
-- 📖 [Remix docs](https://remix.run/docs)
-- 📖 [Remix Cloudflare docs](https://remix.run/guides/vite#cloudflare)
+Stripeを利用したクレジットカード決済で、分割払いを提供するサンプルアプリです。
 
-## Development
+## 実装している決済フロー
 
-Run the dev server:
+- ユーザーがクレジットカード番号をフォームに入力
+- カード情報の入力が完了すると、アプリがStripe上にデータを送信する
+- [分割払いに対応しているクレジットカードの場合] カード番号フォームの下に分割払いプランを選択するUIが表示される
+- 注文するボタンをクリックすると、カード決済処理が開始される
+- 3Dセキュアによる認証が必要な場合は、UI表示またはリダイレクトが行われる
+- 決済が完了すると、決済フォーム下部に支払い金額と分割払い回数が表示される
 
-```sh
+## デモアプリの実行方法
+
+### セットアップ
+
+```
+git clone git@github.com:hideokamoto-stripe/demo-jp-card-installments.git
+cd demo-jp-card-installments
+npm install
+```
+
+### 環境変数の設定
+
+```bash
+touch .env
+touch .dev.vars
+```
+
+**.env**
+```
+VITE_PUBLIC_STRIPE_PUB_KEY=<pk_test_から始まる公開可能APIキー>
+```
+**.dev.vars**
+```
+STRIPE_SECRET_API_KEY=<sk_test_から始まるシークレットキー>
+```
+
+### アプリケーションの起動
+
+```bash
 npm run dev
 ```
 
-To run Wrangler:
+### Cloudflareへのデプロイ
 
-```sh
+```
 npm run build
-npm run start
-```
-
-## Typegen
-
-Generate types for your Cloudflare bindings in `wrangler.toml`:
-
-```sh
-npm run typegen
-```
-
-You will need to rerun typegen whenever you make changes to `wrangler.toml`.
-
-## Deployment
-
-First, build your app for production:
-
-```sh
-npm run build
-```
-
-Then, deploy your app to Cloudflare Pages:
-
-```sh
 npm run deploy
 ```
 
-## Styling
+Cloudflare Pagesにデプロイを行います。`Wrangler`またはダッシュボードの設定にて`STRIPE_SECRET_API_KEY`を環境変数として登録してください。
 
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever css framework you prefer. See the [Vite docs on css](https://vitejs.dev/guide/features.html#css) for more information.
+## Author
+
+[Hidetaka Okamoto](https://hidetaka.dev)
